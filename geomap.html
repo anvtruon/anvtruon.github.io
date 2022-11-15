@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<style>
+
+div.tooltip {
+    position: fixed;
+    text-align: center;
+    width: 130px;					
+    height: 70px;					
+    padding: 2px;
+    background-color: white
+	
+}
+button {
+  position: absolute;
+  width: 100px;
+  font-size: 20px;
+  right: 20px;
+  top: 40px;
+  padding: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+</style>
+<html>
+<title>Georgia Population Density, 2022</title>
+<h1> Georgia Population Density, 2022</h1>
+<button id="buttonColor"  value = "ON">Change Color</button>
+<!--<input type= "checkbox"id="changer" value="ON" onclick="toggle()" >BuPu Scheme</button>-->
+
+</html>
+
+
+
+
+
+<svg width="1000" height="560"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
+<script>
+//SOURCES:
+//topojson of georgia from: https://github.com/deldersveld/topojson/blob/master/countries/us-states/GA-13-georgia-counties.json
+//legend/colorscheme from: https://bl.ocks.org/mbostock/5562380
+//https://bl.ocks.org/mbostock/4060606
+    
+
+var densityy = d3.map();
+    
+var svg = d3.select("svg")
+//global variable used for toggling colors
+var tog = document.getElementById("buttonColor");
+
+//color schemes
+var color1 = d3.scaleThreshold()
+    .domain([1, 10, 50, 200, 500, 1000, 2000, 4000])
+    .range(d3.schemeOrRd[9]);
+    
+var color2 = d3.scaleThreshold()
+    .domain([1, 10, 50, 200, 500, 1000, 2000, 4000])
+    .range(d3.schemeBuPu[9]);
+
+var x = d3.scaleSqrt()
+    .domain([0, 4500])
+    .rangeRound([440, 950]);
+
+var g = svg.append("g")
+    .attr("class", "key")
+    .attr("transform", "translate(0,40)");
+//initialize tooptip
+var tooltip = d3.select("body").append("div") 
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+//visualize rectangle for legend
+g.selectAll("rect")
+  .data(color1.range().map(function(d) {
+      d = color1.invertExtent(d);
+      if (d[0] == null) d[0] = x.domain()[0];
+      if (d[1] == null) d[1] = x.domain()[1];
+      return d;
+    }))
+  .enter().append("rect")
+    .attr("height", 8)
+    .attr("x", function(d) { return x(d[0]); })
+    .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+    .attr("fill", function(d) { return color1(d[0]); });
+//text for legend
+g.append("text")
+    .attr("class", "caption")
+    .attr("x", x.range()[0])
+    .attr("y", -6)
+    .attr("fill", "#000")
+    .attr("text-anchor", "start")
+    .attr("font-weight", "bold")
+    .text("Population per square mile");
+//ticks for the legend
+g.call(d3.axisBottom(x)
+    .tickSize(13)
+    .tickValues(color1.domain()))
+  .select(".domain")
+    .remove();
+
+d3.queue()
+    .defer(d3.json, "georgia.json") //read in our topojson file
+    .defer(d3.csv, "density.csv", function(data){densityy.set(+data.GEOID, +data.Dense)}) //create a map/dictionary with GEOID as key and density as value
+    .await(ready);
+console.log(densityy);
+    
+//projection for the map
+var projection = d3.geoAlbersUsa()
+    .translate([-400 ,-200])
+    .scale(5500);
+
+var path = d3.geoPath()
+    .projection(projection);
+
+function ready(error, data){
+    console.log(data)
+    //read in json values
+    var states = topojson.feature(data, data.objects.counties).features
+    console.log(states)
+    
+    var map = svg.append("g")
+    
+    .attr("class", "counties")
+    .selectAll("path")
+    .data(states)
+    .enter().append("path")
+    .attr("fill", function(d) { 
+      return color1(densityy.get(d.properties.GEOID)); })
+    .attr("d", path)
+    .on("mouseover", function(d){ //tooltip functionality
+        tooltip
+            .transition()
+            .duration(50)
+                  
+        tooltip.html("<strong>" + d.properties.NAME + " County " + "</strong>" + "<br>" + "Population/mile^2: " + densityy.get(d.properties.GEOID)) //display the name of the data when hovering over
+            .style('top', d3.event.pageY + 10 + 'px') 
+            .style('left', d3.event.pageX + 10 + 'px')
+            .style("opacity", 1)  
+              })
+    .on("mouseout", function(d){ //tooltip functionality
+        tooltip
+            .transition()
+            .duration(50)
+                  
+        tooltip.html("<strong>" + d.properties.NAME + " County " + "</strong>" + "<br>" + "Population/mile^2: " + densityy.get(d.properties.GEOID)) //display the name of the data when hovering over
+            .style('top', d3.event.pageY + 10 + 'px') 
+            .style('left', d3.event.pageX + 10 + 'px')
+            .style("opacity", 0)  
+              });
+    console.log(map)
+    var buttonColor = d3.select("#buttonColor")
+        .on("click", colorFunction)
+        
+    function colorFunction(){
+        console.log(1)
+        //toggle for the colors
+        if(tog.value == "ON"){
+            tog.value = "OFF"
+        }
+        else if(tog.value == "OFF"){
+            tog.value = "ON"        
+        }
+        //update the fill attribute for our map
+        map.attr("fill", function(d) { 
+          if(tog.value == "ON"){
+              g.selectAll("rect")
+                .attr("fill", function(d) { return color1(d[0]); });
+
+              return color1(densityy.get(d.properties.GEOID)); 
+          }
+          else{
+                            g.selectAll("rect")
+                .attr("fill", function(d) { return color2(d[0]); });
+            return color2(densityy.get(d.properties.GEOID)); }
+            })
+    }
+}
+
+</script>
+<h3>Andre Truong</h4>
+<h5>Files Submitted:</h5>
+    <ul>
+      <li>geomap.html</li>
+      <li>georgia.json</li>
+      <li>density.csv</li>
+    </ul>
+      
+    <h5> Sources: </h4>
+      <ul>
+        <li>https://github.com/deldersveld/topojson/blob/master/countries/us-states/GA-13-georgia-counties.json</li>
+        <li>https://bl.ocks.org/mbostock/5562380</li>
+        <li>https://bl.ocks.org/mbostock/4060606
+    </li>
+      </ul>
